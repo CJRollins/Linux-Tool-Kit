@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "Linux-Tool-Kit",
+			"path": "."
+		},
+		{
+			"name": "weave-workshop",
+			"path": "../weave-workshop"
+		}
+	],
+	"settings": {}
+}

@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# weave — open the workshop. The loom turns above, grace_ keeps the floor.
+#
+# Usage:
+#     weave              boot loom + grace_ in a tmux session, or reattach
+#     weave tend ARGS    reach into the underworld with grace_tend.py
+#                        examples:
+#                            weave tend list
+#                            weave tend show "Mavrin the Underspoken"
+#                            weave tend add "Mavrin the Underspoken" \
+#                                "owes the moon an apology" --weight 3
+#     weave stop         close the workshop (tear down the tmux session)
+#
+# The boot is idempotent: running `weave` while the workshop is already open
+# reattaches you to it. Detach without closing with Ctrl-B then d.
+#
+# Pane layout once attached:
+#     ┌─ loom ────────────────────────┐
+#     │ (the daemon, weaving worlds)  │
+#     ├───────────────────────────────┤
+#     │ grace_                        │  ← cursor lands here
+#     │ (your terminal companion)     │
+#     └───────────────────────────────┘
+
+set -euo pipefail
+
+SESSION="weave"
+SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
+REPO_DIR="$(dirname "$(dirname "$SCRIPT")")"
+WORKSHOP="$REPO_DIR/weave-workshop/files"
+
+if [[ ! -d "$WORKSHOP" ]]; then
+    echo "weave: workshop not found at $WORKSHOP" >&2
+    exit 1
+fi
+
+case "${1:-boot}" in
+    tend)
+        shift
+        cd "$WORKSHOP"
+        exec python3 grace_tend.py "$@"
+        ;;
+    stop)
+        if tmux has-session -t "$SESSION" 2>/dev/null; then
+            tmux kill-session -t "$SESSION"
+            echo "weave: the workshop is dark."
+        else
+            echo "weave: the workshop was already closed."
+        fi
+        exit 0
+        ;;
+    boot)
+        ;;
+    -h|--help|help)
+        sed -n '2,/^$/p' "$SCRIPT" | sed 's/^# \{0,1\}//'
+        exit 0
+        ;;
+    *)
+        echo "weave: unknown subcommand '${1}'" >&2
+        echo "usage: weave [boot | tend ARGS... | stop]" >&2
+        exit 1
+        ;;
+esac
+
+if ! command -v tmux >/dev/null 2>&1; then
+    echo "weave: tmux is required. install with: sudo apt install tmux" >&2
+    exit 1
+fi
+
+# Already open? Just walk back in.
+if tmux has-session -t "$SESSION" 2>/dev/null; then
+    exec tmux attach -t "$SESSION"
+fi
+
+# Cold boot: loom on top, grace_ on bottom, cursor on grace_.
+# We use send-keys (not the inline command form) so that if a process dies
+# the pane survives as a live shell — easier to read tracebacks and retry.
+tmux new-session  -d -s "$SESSION" -n workshop -c "$WORKSHOP"
+tmux send-keys    -t "$SESSION:0.0" "python3 loom.py" Enter
+tmux split-window -t "$SESSION:0"   -v -c "$WORKSHOP"
+tmux send-keys    -t "$SESSION:0.1" "python3 grace_.py" Enter
+tmux select-pane  -t "$SESSION:0.1"
+
+exec tmux attach -t "$SESSION"

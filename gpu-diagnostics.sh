@@ -35,40 +35,49 @@ HAS_INTEL=false
 detect_gpus() {
     print_header "GPU Hardware Detection"
 
-    if ! command -v lspci >/dev/null 2>&1; then
-        print_error "lspci not found - install pciutils"
-        return 1
-    fi
-
-    # PCI classes: 0300 VGA, 0302 3D, 0380 Display controller.
-    # Match by class code; avoids string-grep false negatives.
-    local line
-    while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
-        GPU_PCI_LINES+=("$line")
-        local vendor=other
-        if   [[ "$line" =~ [Nn][Vv][Ii][Dd][Ii][Aa] ]]; then vendor=nvidia; HAS_NVIDIA=true
-        elif [[ "$line" =~ [Aa][Mm][Dd]|[Aa][Tt][Ii] ]]; then vendor=amd;    HAS_AMD=true
-        elif [[ "$line" =~ [Ii][Nn][Tt][Ee][Ll]     ]]; then vendor=intel;  HAS_INTEL=true
-        fi
-        GPU_VENDORS+=("$vendor")
-        print_info "$(printf '%-7s %s' "${vendor^^}:" "$line")"
-    done < <(lspci -nn -d ::0300 -d ::0302 -d ::0380 2>/dev/null)
-
-    if [[ ${#GPU_PCI_LINES[@]} -eq 0 ]]; then
-        print_warning "No GPU devices detected via lspci"
-        return 1
-    fi
-
-    # Now resolve which driver is actually bound to each DRM card.
-    # This is ground truth — lsmod is not.
+    # First, check what drivers are bound via DRM (ground truth).
+    # This works even when lspci fails to enumerate the GPU.
     local card driver
     for card in /sys/class/drm/card[0-9]*; do
         [[ -e "$card" ]] || continue
         [[ -L "$card/device/driver" ]] || continue
         driver=$(basename "$(readlink -f "$card/device/driver")")
         DRM_DRIVERS["$(basename "$card")"]=$driver
+        
+        # Infer vendor from driver
+        case "$driver" in
+            amdgpu|radeon) HAS_AMD=true ;;
+            i915|xe)       HAS_INTEL=true ;;
+            nvidia*)       HAS_NVIDIA=true ;;
+        esac
     done
+
+    # Then try lspci for additional info (informational, not authoritative).
+    if command -v lspci >/dev/null 2>&1; then
+        local line
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            GPU_PCI_LINES+=("$line")
+            local vendor=other
+            if   [[ "$line" =~ [Nn][Vv][Ii][Dd][Ii][Aa] ]]; then vendor=nvidia; HAS_NVIDIA=true
+            elif [[ "$line" =~ [Aa][Mm][Dd]|[Aa][Tt][Ii] ]]; then vendor=amd;    HAS_AMD=true
+            elif [[ "$line" =~ [Ii][Nn][Tt][Ee][Ll]     ]]; then vendor=intel;  HAS_INTEL=true
+            fi
+            GPU_VENDORS+=("$vendor")
+            print_info "$(printf '%-7s %s' "${vendor^^}:" "$line")"
+        done < <(lspci -nn -d ::0300 -d ::0302 -d ::0380 2>/dev/null)
+        
+        if [[ ${#GPU_PCI_LINES[@]} -eq 0 ]]; then
+            print_info "Note: lspci detected no GPUs (hardware enumeration may be hidden by BIOS/ACPI)"
+        fi
+    else
+        print_info "lspci not available (install pciutils for detailed PCI info)"
+    fi
+
+    if [[ ${#DRM_DRIVERS[@]} -eq 0 ]]; then
+        print_warning "No GPU drivers bound to DRM cards"
+        return 1
+    fi
 }
 
 check_drm_subsystem() {
@@ -251,18 +260,93 @@ check_intel_drivers() {
         || print_info "intel-gpu-tools not installed (optional)"
 }
 
+check_gpu_functionality() {
+    print_header "GPU Functionality Test"
+    
+    local gl_works=false vk_works=false cl_works=false
+    
+    # Test 1: OpenGL support
+    if command -v glxinfo >/dev/null 2>&1; then
+        local renderer
+        renderer=$(glxinfo -B 2>/dev/null | awk -F': ' '/OpenGL renderer string/ {print $2}')
+        if [[ -n "$renderer" ]]; then
+            if [[ "$renderer" == *llvmpipe* ]] || [[ "$renderer" == *softpipe* ]]; then
+                print_warning "OpenGL: $renderer (software fallback — hardware acceleration unavailable)"
+            else
+                print_success "OpenGL 4.6+ working: $renderer"
+                gl_works=true
+            fi
+        else
+            print_info "OpenGL renderer detection failed (X11/Wayland not available?)"
+        fi
+    else
+        print_info "glxinfo not installed — install 'mesa-utils' to test OpenGL"
+    fi
+
+    # Test 2: Vulkan support
+    if command -v vulkaninfo >/dev/null 2>&1; then
+        local vk_devices
+        vk_devices=$(vulkaninfo 2>&1 | grep -c "GPU id = " || true)
+        if [[ $vk_devices -gt 0 ]]; then
+            print_success "Vulkan working: $vk_devices physical device(s) found"
+            vk_works=true
+            vulkaninfo 2>&1 | grep "GPU id" | head -3 | sed 's/^/  /'
+        else
+            print_warning "Vulkan available but no physical devices found"
+        fi
+    else
+        print_info "vulkaninfo not installed — install 'vulkan-tools' to test Vulkan"
+    fi
+
+    # Test 3: OpenCL support
+    if command -v clinfo >/dev/null 2>&1; then
+        local cl_platforms
+        cl_platforms=$(clinfo 2>&1 | grep -c "Platform.*Number of devices" || true)
+        if [[ $cl_platforms -gt 0 ]]; then
+            print_success "OpenCL working: $cl_platforms platform(s) available"
+            cl_works=true
+        else
+            print_info "OpenCL available but no platforms found"
+        fi
+    else
+        print_info "clinfo not installed — install 'clinfo' to test OpenCL (optional)"
+    fi
+
+    # Summary of functionality
+    echo
+    if $gl_works || $vk_works || $cl_works; then
+        echo "${GREEN}✓ GPU is functional and ready to use${NC}"
+        if $gl_works; then echo "  • OpenGL graphics: YES"; fi
+        if $vk_works; then echo "  • Vulkan graphics: YES"; fi
+        if $cl_works; then echo "  • OpenCL compute: YES"; fi
+    else
+        echo "${YELLOW}⚠ GPU functionality could not be verified${NC}"
+        echo "  Install mesa-utils, vulkan-tools, or clinfo to enable tests"
+    fi
+    echo
+}
+
+
 generate_summary() {
     print_header "Summary"
     if [[ $ISSUES_FOUND -eq 0 ]]; then
-        echo "${GREEN}No issues detected${NC}"
+        echo "${GREEN}✓ No critical issues detected${NC}"
+        echo "  Your GPU setup is healthy and ready for use."
     else
-        echo "${YELLOW}Issues found: $ISSUES_FOUND${NC}"
+        echo "${YELLOW}⚠ Issues found: $ISSUES_FOUND${NC}"
         echo
-        echo "Diagnostic next steps:"
-        echo "  - dmesg --level=err,warn | grep -iE 'amdgpu|i915|nvidia|drm'"
-        echo "  - journalctl -b -p warning | grep -iE 'gpu|drm'"
-        echo "  - cat /proc/cmdline   # check for blacklist or nomodeset"
-        echo "  - grep -r amdgpu /etc/modprobe.d/ /usr/lib/modprobe.d/ 2>/dev/null"
+        echo "Troubleshooting steps:"
+        echo "  1. Check kernel logs:"
+        echo "     dmesg --level=err,warn | grep -iE 'amdgpu|i915|nvidia|drm'"
+        echo "  2. Check systemd logs:"
+        echo "     journalctl -b -p warning | grep -iE 'gpu|drm|amdgpu'"
+        echo "  3. Verify kernel parameters:"
+        echo "     cat /proc/cmdline   # check for 'nomodeset' or 'blacklist'"
+        echo "  4. Check module configuration:"
+        echo "     grep -r amdgpu /etc/modprobe.d/ /usr/lib/modprobe.d/ 2>/dev/null"
+        echo "  5. For hardware not detected by lspci:"
+        echo "     This is often a BIOS/ACPI quirk. Check if your GPU is functional"
+        echo "     using the 'GPU Functionality Test' section above."
     fi
     echo
 }
@@ -312,6 +396,7 @@ main() {
         "")     check_nvidia_drivers; check_amd_drivers; check_intel_drivers ;;
     esac
 
+    check_gpu_functionality
     generate_summary
     [[ $ISSUES_FOUND -eq 0 ]] && exit 0 || exit 1
 }
