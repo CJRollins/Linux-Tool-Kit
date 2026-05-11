@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+"""
+gothicize — pipe any plain text through this scroll, and it shall be returned
+to thee robed in the gothic register.
+
+Usage:
+    ./some_script.sh        | gothicize
+    cat /var/log/syslog     | gothicize
+    apt update 2>&1         | gothicize
+    gothicize < report.txt  > report.gothic.txt
+
+It is a stream filter. It rewrites status glyphs, common technical vocabulary,
+and === HEADER === lines into their candlelit forms. ANSI colors are left
+alone (so colored output stays colored). Capitalization is roughly preserved.
+"""
+
+import re
+import sys
+
+# ── The four-glyph alphabet ─────────────────────────────────────────────────
+# ☩ binding (success)   ☾ noted (info)   ☽ portent (warning)   ✠ dread (error)
+SYMBOL_MAP = {
+    '✓':       '☩',
+    '✗':       '✠',
+    '⚠':       '☽',
+    'ℹ':       '☾',
+    '[OK]':    '[☩ SEALED]',
+    '[PASS]':  '[☩ BOUND]',
+    '[INFO]':  '[☾ NOTED]',
+    '[WARN]':  '[☽ PORTENT]',
+    '[FAIL]':  '[✠ FALLEN]',
+    '[ERROR]': '[✠ DREAD]',
+}
+
+# ── The lexicon ─────────────────────────────────────────────────────────────
+# Order matters: longer/more-specific phrases come first so they win the match.
+# Patterns are case-insensitive; capitalization of the source is preserved.
+PHRASE_MAP = [
+    # multi-word phrases
+    (r'\bnot found\b',            'absent from this house'),
+    (r'\bnot detected\b',         'unrevealed'),
+    (r'\bnot installed\b',        'unsummoned'),
+    (r'\bnot loaded\b',           'unbound'),
+    (r'\bnot available\b',        'not at hand'),
+    (r'\bnot running\b',          'at rest'),
+    (r'\bnot responding\b',       'mute to all calling'),
+    (r'\bdoes not exist\b',       'is not'),
+    (r'\bin progress\b',          'in motion'),
+    (r'\bup to date\b',           'current with the hour'),
+    (r'\bout of date\b',          'long-shadowed'),
+    (r'\bpermission denied\b',    'bloodright refused'),
+    (r'\baccess denied\b',        'the door is shut to thee'),
+    (r'\bconnection refused\b',   'the lattice will not hear thee'),
+    (r'\btimed out\b',            'the bell has tolled in vain'),
+    (r'\bgroup membership\b',     'lineage'),
+    (r'\benvironment variable\b', 'sigil set upon the wind'),
+    (r'\bread[- ]only\b',         'unmarkable'),
+
+    # state verbs
+    (r'\bsuccessfully\b',         'in binding'),
+    (r'\bsuccessful\b',           'bound'),
+    (r'\bsuccess\b',              'binding'),
+    (r'\bfailure\b',              'falling'),
+    (r'\bfailed\b',               'fell'),
+    (r'\bfailing\b',              'falling'),
+    (r'\bfail\b',                 'fall'),
+    (r'\berrors?\b',              'dread'),
+    (r'\bwarnings?\b',            'portents'),
+    (r'\bloaded\b',               'answered the summoning'),
+    (r'\bloading\b',              'summoning'),
+    (r'\bunloaded\b',             'dismissed'),
+    (r'\bdetected\b',             'revealed'),
+    (r'\bdetect(s|ing)?\b',       'reveal'),
+    (r'\binstalled\b',            'summoned'),
+    (r'\binstall(s|ing)?\b',      'summon'),
+    (r'\bmissing\b',              'absent'),
+    (r'\bavailable\b',            'at hand'),
+    (r'\brunning\b',              'abroad'),
+    (r'\bstopped\b',              'at rest'),
+    (r'\bstarted\b',              'waked'),
+    (r'\bstarting\b',             'waking'),
+    (r'\bstopping\b',             'resting'),
+    (r'\bcheck(ing)?\b',          'inquiry'),
+    (r'\bverified\b',             'witnessed true'),
+    (r'\bvalid\b',                'true-spoken'),
+    (r'\binvalid\b',              'false-spoken'),
+    (r'\benabled\b',              'unsealed'),
+    (r'\bdisabled\b',             'sealed shut'),
+    (r'\bactive\b',               'in waking'),
+    (r'\binactive\b',             'in slumber'),
+
+    # technical nouns
+    (r'\bGPUs?\b',                'metal familiar'),
+    (r'\bCPUs?\b',                'engine of thought'),
+    (r'\bRAM\b',                  'vapours'),
+    (r'\bdisk(s)?\b',             'stone'),
+    (r'\bkernel\b',               'inner sanctum'),
+    (r'\bmodules?\b',             'familiar'),
+    (r'\bdrivers?\b',             'covenant'),
+    (r'\bdevices?\b',             'vessel'),
+    (r'\busers?\b',               'supplicant'),
+    (r'\bgroups?\b',              'lineage'),
+    (r'\bpermissions?\b',         'bloodright'),
+    (r'\bservices?\b',            'rite'),
+    (r'\bprocess(es)?\b',         'spirit'),
+    (r'\bfiles?\b',               'scroll'),
+    (r'\bdirectory\b',            'chamber'),
+    (r'\bdirectories\b',          'chambers'),
+    (r'\bfolders?\b',             'chamber'),
+    (r'\bnetworks?\b',            'lattice'),
+    (r'\bversion\b',              'epoch'),
+    (r'\bcommands?\b',            'incantation'),
+    (r'\boutput\b',               'utterance'),
+    (r'\binput\b',                'offering'),
+    (r'\bconfiguration\b',        'covenant'),
+    (r'\bconfig\b',               'covenant'),
+    (r'\bsubsystem\b',            'loom'),
+    (r'\bsystem\b',               'house'),
+    (r'\blogs?\b',                'chronicle'),
+    (r'\bboot(ing)?\b',           'waking'),
+    (r'\bshutdown\b',             'rest'),
+    (r'\bpackages?\b',            'reliquary'),
+    (r'\brepository\b',           'reliquary'),
+    (r'\bdependencies\b',         'attendants'),
+    (r'\bdependency\b',           'attendant'),
+    (r'\bport(s)?\b',             'gate'),
+    (r'\bhost(s)?\b',             'keeper'),
+]
+
+HEADER_RE = re.compile(r'^\s*=+\s*(.+?)\s*=+\s*$')
+ANSI_RE   = re.compile(r'\x1b\[[0-9;]*m')
+
+DIM = '\x1b[2m'
+NC  = '\x1b[0m'
+
+
+def _preserve_case(original: str, replacement: str) -> str:
+    """Echo the casing of the matched text onto the replacement."""
+    if original.isupper() and len(original) > 1:
+        return replacement.upper()
+    if original[:1].isupper():
+        return replacement[:1].upper() + replacement[1:]
+    return replacement
+
+
+def transform_line(line: str) -> str:
+    # Headers: === Foo === → ornamented form with a divider beneath
+    plain = ANSI_RE.sub('', line).rstrip()
+    m = HEADER_RE.match(plain)
+    if m:
+        title = m.group(1).strip()
+        return f'\n❦ {title} ❦\n{DIM}────────────────────────────────────────{NC}'
+
+    out = line
+    for glyph, gothic in SYMBOL_MAP.items():
+        out = out.replace(glyph, gothic)
+
+    for pattern, replacement in PHRASE_MAP:
+        out = re.sub(
+            pattern,
+            lambda m, r=replacement: _preserve_case(m.group(0), r),
+            out,
+            flags=re.IGNORECASE,
+        )
+
+    return out
+
+
+def main() -> int:
+    bare = '--bare' in sys.argv[1:]  # suppress invocation/benediction
+
+    if not bare:
+        sys.stdout.write(f'{DIM}    ✦ let the candles be lit. let the words be heard. ✦{NC}\n')
+
+    try:
+        for raw in sys.stdin:
+            sys.stdout.write(transform_line(raw.rstrip('\n')) + '\n')
+            sys.stdout.flush()
+    except (KeyboardInterrupt, BrokenPipeError):
+        return 130
+
+    if not bare:
+        sys.stdout.write(f'\n{DIM}    ✦ the reading is ended. blow out the lights as thou wilt. ✦{NC}\n')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

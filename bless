@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+"""
+bless — pipe any plain text through this leaf, and it shall be returned
+to thee robed in light. The twin of `gothicize`.
+
+Usage:
+    ./some_script.sh        | bless
+    cat /var/log/syslog     | bless
+    apt update 2>&1         | bless
+    bless < report.txt      > report.blessed.txt
+
+It is a stream filter. It rewrites status glyphs, common technical vocabulary,
+and === HEADER === lines into their sunlit forms. ANSI colors are left alone.
+Capitalization is roughly preserved. Errors remain errors; they are merely
+delivered as a kind chaplain would deliver bad news — clearly, but with grace.
+"""
+
+import re
+import sys
+
+# ── The four-glyph alphabet ─────────────────────────────────────────────────
+# ✿ the bloom (success)        ✧ the dewdrop (info)
+# ☼ the morning sun (warning)  ⚘ the bent stem (error — that which needs tending)
+SYMBOL_MAP = {
+    '✓':       '✿',
+    '✗':       '⚘',
+    '⚠':       '☼',
+    'ℹ':       '✧',
+    '[OK]':    '[✿ BLESSED]',
+    '[PASS]':  '[✿ JOYFUL]',
+    '[INFO]':  '[✧ OFFERED]',
+    '[WARN]':  '[☼ MINDFUL]',
+    '[FAIL]':  '[⚘ TENDING]',
+    '[ERROR]': '[⚘ TENDING]',
+}
+
+# ── The lexicon ─────────────────────────────────────────────────────────────
+# Order matters: longer/more-specific phrases come first so they win the match.
+# Patterns are case-insensitive; capitalization of the source is preserved.
+PHRASE_MAP = [
+    # multi-word phrases
+    (r'\bnot found\b',            'yet to arrive'),
+    (r'\bnot detected\b',         'unseen for now'),
+    (r'\bnot installed\b',        'not yet received as gift'),
+    (r'\bnot loaded\b',           'not yet welcomed home'),
+    (r'\bnot available\b',        'not yet at thy hand'),
+    (r'\bnot running\b',          'at peaceful rest'),
+    (r'\bnot responding\b',       'gathering itself in silence'),
+    (r'\bdoes not exist\b',       'is yet unmade'),
+    (r'\bin progress\b',          'in glad labor'),
+    (r'\bup to date\b',           'walking with the season'),
+    (r'\bout of date\b',          'awaiting renewal'),
+    (r'\bpermission denied\b',    'grace withheld for now'),
+    (r'\baccess denied\b',        'the door rests closed for now'),
+    (r'\bconnection refused\b',   'the communion is not yet joined'),
+    (r'\btimed out\b',            'the patient bell received no answer'),
+    (r'\bgroup membership\b',     'fellowship'),
+    (r'\benvironment variable\b', 'word kept in the chamber'),
+    (r'\bread[- ]only\b',         'kept as it is, with care'),
+
+    # state verbs
+    (r'\bsuccessfully\b',         'with joy'),
+    (r'\bsuccessful\b',           'joyful'),
+    (r'\bsuccess\b',              'blessing'),
+    (r'\bfailure\b',              'stumble'),
+    (r'\bfailed\b',               'stumbled'),
+    (r'\bfailing\b',              'stumbling'),
+    (r'\bfail\b',                 'stumble'),
+    (r'\berrors?\b',              'small sorrows'),
+    (r'\bwarnings?\b',            'gentle counsels'),
+    (r'\bloaded\b',               'welcomed home'),
+    (r'\bloading\b',              'welcoming'),
+    (r'\bunloaded\b',             'sent forth with thanks'),
+    (r'\bdetected\b',             'found and greeted'),
+    (r'\bdetect(s|ing)?\b',       'greet'),
+    (r'\binstalled\b',            'received as gift'),
+    (r'\binstall(s|ing)?\b',      'receive as gift'),
+    (r'\bmissing\b',              'yet to come'),
+    (r'\bavailable\b',            'at thy hand'),
+    (r'\brunning\b',              'alight'),
+    (r'\bstopped\b',              'at rest'),
+    (r'\bstarted\b',              'risen'),
+    (r'\bstarting\b',              'rising'),
+    (r'\bstopping\b',             'settling to rest'),
+    (r'\bcheck(ing)?\b',          'glad attending'),
+    (r'\bverified\b',             'known true'),
+    (r'\bvalid\b',                'true and good'),
+    (r'\binvalid\b',              'not yet rightly formed'),
+    (r'\benabled\b',              'opened'),
+    (r'\bdisabled\b',             'kept in stillness'),
+    (r'\bactive\b',               'in glad labor'),
+    (r'\binactive\b',             'in glad rest'),
+
+    # technical nouns
+    (r'\bGPUs?\b',                'shining instrument'),
+    (r'\bCPUs?\b',                'patient mind'),
+    (r'\bRAM\b',                  'open palms'),
+    (r'\bdisk(s)?\b',             'remembrance'),
+    (r'\bkernel\b',               'inner garden'),
+    (r'\bmodules?\b',             'gift'),
+    (r'\bdrivers?\b',             'shepherd'),
+    (r'\bdevices?\b',             'instrument'),
+    (r'\busers?\b',               'beloved'),
+    (r'\bgroups?\b',              'fellowship'),
+    (r'\bpermissions?\b',         'grace'),
+    (r'\bservices?\b',            'ministry'),
+    (r'\bprocess(es)?\b',         'labor'),
+    (r'\bfiles?\b',               'leaf'),
+    (r'\bdirectory\b',            'grove'),
+    (r'\bdirectories\b',          'groves'),
+    (r'\bfolders?\b',             'grove'),
+    (r'\bnetworks?\b',            'great communion'),
+    (r'\bversion\b',              'season'),
+    (r'\bcommands?\b',            'invitation'),
+    (r'\boutput\b',               'song'),
+    (r'\binput\b',                'offering'),
+    (r'\bconfiguration\b',        'harmony'),
+    (r'\bconfig\b',               'harmony'),
+    (r'\bsubsystem\b',            'choir'),
+    (r'\bsystem\b',               'house'),
+    (r'\blogs?\b',                'psalter'),
+    (r'\bboot(ing)?\b',           'dawn'),
+    (r'\bshutdown\b',             'vespers'),
+    (r'\bpackages?\b',            'gift'),
+    (r'\brepository\b',           'orchard'),
+    (r'\bdependencies\b',         'companions'),
+    (r'\bdependency\b',           'companion'),
+    (r'\bport(s)?\b',             'open window'),
+    (r'\bhost(s)?\b',             'keeper'),
+]
+
+HEADER_RE = re.compile(r'^\s*=+\s*(.+?)\s*=+\s*$')
+ANSI_RE   = re.compile(r'\x1b\[[0-9;]*m')
+
+GOLD = '\x1b[1;33m'   # bright yellow — for the bloom and the divider
+NC   = '\x1b[0m'
+
+
+def _preserve_case(original: str, replacement: str) -> str:
+    """Echo the casing of the matched text onto the replacement."""
+    # Only echo all-caps when the source is a true acronym (alphabetic).
+    if len(original) > 1 and original.isupper() and original.isalpha():
+        return replacement.upper()
+    if original[:1].isupper():
+        return replacement[:1].upper() + replacement[1:]
+    return replacement
+
+
+def transform_line(line: str) -> str:
+    plain = ANSI_RE.sub('', line).rstrip()
+    m = HEADER_RE.match(plain)
+    if m:
+        title = m.group(1).strip()
+        return f'\n{GOLD}✿ {title} ✿{NC}\n{GOLD}    ⸻  ✿  ⸻  ✿  ⸻  ✿  ⸻{NC}'
+
+    out = line
+    for glyph, blessed in SYMBOL_MAP.items():
+        out = out.replace(glyph, blessed)
+
+    for pattern, replacement in PHRASE_MAP:
+        out = re.sub(
+            pattern,
+            lambda m, r=replacement: _preserve_case(m.group(0), r),
+            out,
+            flags=re.IGNORECASE,
+        )
+
+    return out
+
+
+def main() -> int:
+    bare = '--bare' in sys.argv[1:]
+
+    if not bare:
+        sys.stdout.write(f'{GOLD}    ☼ lo, the sun rises upon thy works. let the reading begin. ☼{NC}\n')
+
+    try:
+        for raw in sys.stdin:
+            sys.stdout.write(transform_line(raw.rstrip('\n')) + '\n')
+            sys.stdout.flush()
+    except (KeyboardInterrupt, BrokenPipeError):
+        return 130
+
+    if not bare:
+        sys.stdout.write(f'\n{GOLD}    ☼ the reading is ended. go forth in gladness. ☼{NC}\n')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

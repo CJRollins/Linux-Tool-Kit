@@ -1,0 +1,62 @@
+
+════════════════════════════════════════════════════════════
+
+    ═══════════════════════════════════
+         ✨ GOTHIC LIGHTHOUSE BEACON ✨
+    ═══════════════════════════════════
+             ░▒▓█ ◐ █▓▒░
+             ░▒▓█   █▓▒░
+              ░▒▓███▓▒░
+              ░▒▓███▓▒░
+               ░▒▓█▓▒░
+                ░▒█▒░
+                ░▒█▒░
+               ▓██████▓
+              ▓██████████▓
+             ░▓████████████▓░
+            ░░▓█████████████▓░░
+           ░░░▓█████████████▓░░░
+          ░ ░ ░▓███████████▓░ ░ ░
+         ░░ ░░ ░▓██████████▓░ ░░ ░░
+        ═══════════════════════════════════
+    🌊 Guiding Lost Souls Through Shadow 🌊
+    ═══════════════════════════════════
+    
+════════════════════════════════════════════════════════════
+============================================================
+GOTHIC TRANSLATOR
+============================================================
+
+Input: let the candles be lit let the bus be heard
+Detected Epoch: modern
+
+------------------------------------------------------------
+
+[LOX]
+----------------------------------------
+// Gothic Translation to Lox
+var gothicEpoch = "modern"
+var originalText = "let the candles be lit let the bus be heard"
+
+class GothicTranslation {
+  init(text, epoch) {
+    this.text = text
+    this.epoch = epoch
+    this.whispered = this.toWhispered()
+  }
+
+  toWhispered() {
+    return "*whispers* " + this.text
+  }
+
+  display() {
+    System.print("Epoch: " + this.epoch)
+    System.print("Text: " + this.text)
+    System.print("Whispered: " + this.whispered())
+  }
+}
+
+var gothic = GothicTranslation.new(originalText, gothicEpoch)
+gothic.display()
+
+============================================================

@@ -1,0 +1,44 @@
+[0;34m╔════════════════════════════════════╗[0m
+[0;34m║  GPU Driver Diagnostics Tool       ║[0m
+[0;34m╚════════════════════════════════════╝[0m
+
+[0;34m=== GPU Hardware Detection ===[0m
+
+[1;33m⚠[0m No GPU devices detected via lspci
+
+[0;34m=== DRM / Graphics Subsystem ===[0m
+
+[0;32m✓[0m DRM subsystem present
+[1;33m⚠[0m No DRM cards have a bound driver
+
+[0;34m=== Kernel Module Status (informational) ===[0m
+
+[0;32m✓[0m loaded: amdgpu
+
+[0;34m=== Device Permissions (current user) ===[0m
+
+[0;32m✓[0m /dev/dri/card1 readable
+[0;32m✓[0m /dev/dri/card1 writable
+[0;32m✓[0m /dev/dri/renderD128 readable
+[0;32m✓[0m /dev/dri/renderD128 writable
+[0;32m✓[0m user in 'video' group
+[0;32m✓[0m user in 'render' group
+
+[0;34m=== Environment Variables ===[0m
+
+[0;32m✓[0m Environment check complete
+
+[0;34m=== AMD Driver Check ===[0m
+
+[0;34mℹ[0m No AMD GPU detected; skipping
+
+[0;34m=== Summary ===[0m
+
+[1;33mIssues found: 2[0m
+
+Diagnostic next steps:
+  - dmesg --level=err,warn | grep -iE 'amdgpu|i915|nvidia|drm'
+  - journalctl -b -p warning | grep -iE 'gpu|drm'
+  - cat /proc/cmdline   # check for blacklist or nomodeset
+  - grep -r amdgpu /etc/modprobe.d/ /usr/lib/modprobe.d/ 2>/dev/null
+
