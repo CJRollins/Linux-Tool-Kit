@@ -3,6 +3,7 @@
 Run as: python loom.py
 Quit:   Ctrl-C
 """
+import json
 import random
 import sys
 import time
@@ -23,10 +24,20 @@ def ensure_world(state):
         world_dir = WORLDS_DIR / str(seed)
         world_dir.mkdir(parents=True, exist_ok=True)
         (world_dir / "map.txt").write_text(world["ascii_map"])
+        (world_dir / "world.json").write_text(json.dumps(world, indent=2))
         state["current_world_seed"] = seed
         state["tick"] = 0
         write_state(state)
         append_event(f"a new world was born. seed: {seed}.")
+    else:
+        # Check if world.json exists and has landmarks, if not regenerate
+        seed = state["current_world_seed"]
+        world_dir = WORLDS_DIR / str(seed)
+        world_file = world_dir / "world.json"
+        if not world_file.exists():
+            world = birth_world(seed)
+            (world_dir / "world.json").write_text(json.dumps(world, indent=2))
+            append_event(f"world data updated for seed: {seed}.")
     return state
 
 

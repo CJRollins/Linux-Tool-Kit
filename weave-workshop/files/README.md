@@ -43,16 +43,105 @@ She is the same Grace_ underneath. The look is just how she's showing up today.
 
 Stable within a calendar day — she doesn't change her mind hour to hour. New day, new roll. Edit `looks.py` to add new ones; she'll incorporate them into her wardrobe on the next day-roll.
 
+## architecture
+
+```mermaid
+classDiagram
+    class GraceApp {
+        +CSS: str
+        +last_change: float
+        +last_look_check: float
+        +look_name: str
+        +look: dict
+        +voice: str
+        +compose()
+        +on_mount()
+        +update_display()
+        +on_input_submitted(event)
+    }
+
+    class Governor {
+        -_idle_since: float
+        -ceiling: int
+        +__init__()
+        +update()
+        +sleep_for_duty_cycle(work_seconds)
+    }
+
+    class State {
+        Functions for state management
+        +ensure_dirs()
+        +default_state()
+        +read_state()
+        +write_state(state)
+        +append_event(text)
+    }
+
+    class Souls {
+        Functions for soul management
+        +load()
+        +save(data)
+        +welcome_text()
+        +seed_first_soul()
+        +soul_dies(name, life_record, threads)
+        +tick()
+        +intervene(soul_name, thread_index, verb, note)
+        +add_thread(soul_name, text, kind, weight)
+    }
+
+    class WorldGen {
+        Functions for world generation
+        +generate_heightmap(seed, width, height)
+        +heightmap_to_ascii(grid)
+        +birth_world(seed)
+    }
+
+    class Looks {
+        Functions for visual themes
+        +_weighted_pick()
+        +pick_today(force_reroll)
+    }
+
+    GraceApp --> State : reads state
+    GraceApp --> Souls : loads soul data
+    GraceApp --> Looks : picks daily look
+
+    Governor --> State : updates governor state
+
+    Souls --> State : appends events
+
+    WorldGen --> State : saves world data
+
+    loom.py --> Governor : uses
+    loom.py --> State : reads/writes
+    loom.py --> Souls : ticks souls
+    loom.py --> WorldGen : births world
+
+    grace_.py --> GraceApp : main class
+    grace_.py --> State : uses
+    grace_.py --> Souls : uses
+    grace_.py --> Looks : uses
+```
+
 ## install & run
 
 ```bash
 pip install -r requirements.txt
 
+# Quick start - everything at once (recommended!)
+python run_all.py
+# Then open: http://localhost:5000
+
+# Or run components separately:
 # terminal 1 — the daemon
 python loom.py
 
-# terminal 2 — the face
+# terminal 2 — the face (now with interactive world exploration!)
 python grace_.py
+
+# terminal 3 — web interface (optional, for visual exploration)
+python web.py
+# Then open: http://localhost:5000
 ```
 
 Quit either with Ctrl-C.
@@ -71,7 +160,51 @@ Quit either with Ctrl-C.
 
 `tail -f ~/weave-workshop/grace_/events.log` is recommended viewing while you prototype on the other monitor.
 
+## world exploration (v1.5)
+
+Grace_ now supports interactive world exploration! You can explore the generated world, move around, and visit landmarks.
+
+**Commands:**
+- `move <direction> [distance]` - Move in a direction (north, south, east, west, northeast, etc.)
+- `travel <landmark>` - Fast travel to a known landmark (e.g., `travel monastery`, `travel castle`)
+- `look` - Describe your current location and nearby landmarks
+- `map [radius]` - Show a map view centered on your position
+- `help` - Show available commands
+
+**Landmarks:**
+- **Monastery of the Weave** - Your starting hub, a place of learning and contemplation
+- **Castle of Najkir** - A mechanized flying island defended by crafted dragons
+
+Start exploring by typing commands in Grace_'s prompt!
+
+## web interface (v1.5+)
+
+For visual exploration without the terminal, run the web server:
+
+```bash
+python web.py
+```
+
+Then open **http://localhost:5000** in your browser for a full visual interface featuring:
+
+- **Real-time world map** with your position marked
+- **Interactive command panel** with quick buttons
+- **Live status updates** from the loom and underworld
+- **Event stream** showing all system activity
+- **Landmark navigation** with one-click travel
+- **Soul roster** showing underworld inhabitants
+
+The web interface gives you "eyes" on your terminal system — no more sprinting blind!
+
 ## roadmap
+
+**V1.5** ✅ IMPLEMENTED
+- TileBuilder: Interactive world exploration system with movement and landmarks
+- Monastery map: Hub location at coordinates (15, 21) - "A hub of learning and contemplation, perched on a hillside overlooking the world"
+- Fast travel: Journey instantly between known landmarks while working
+- Castle of Najkir: Mechanized flying island at coordinates (35, 21) - "A mechanized flying island, defended by dragons crafted in its forges. It hovers above the highest peaks"
+- Interactive prompt: Commands like `move north`, `travel monastery`, `look`, `map`
+- Web interface: Visual exploration at http://localhost:5000 with real-time updates
 
 **v2**
 - prompt becomes interactive (textual or prompt_toolkit)

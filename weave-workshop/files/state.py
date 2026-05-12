@@ -47,3 +47,13 @@ def append_event(text):
     stamp = datetime.now().strftime("%H:%M:%S")
     with EVENTS_LOG.open("a") as f:
         f.write(f"[{stamp}] {text}\n")
+
+
+def tail_events(n=6):
+    """Get the last n events from the log."""
+    if not EVENTS_LOG.exists():
+        return []
+    try:
+        return EVENTS_LOG.read_text().splitlines()[-n:]
+    except OSError:
+        return []

@@ -108,4 +108,4 @@ feature requests considered on their merits.
 
 ## License
 
-MIT. See `LICENSE`.
+Be wild. The only one wild enough to try.

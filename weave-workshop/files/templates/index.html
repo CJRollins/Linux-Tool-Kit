@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>grace_ — Terminal Companion</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0a;
+            color: #00ff00;
+            overflow-x: hidden;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            grid-template-rows: auto 1fr auto;
+            height: 100vh;
+            gap: 1rem;
+            padding: 1rem;
+        }
+
+        .header {
+            grid-column: 1 / -1;
+            text-align: center;
+            border-bottom: 1px solid #00ff00;
+            padding-bottom: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .sigil {
+            background: #001100;
+            border: 1px solid #00ff00;
+            padding: 1rem;
+            text-align: center;
+            font-size: 0.8rem;
+            white-space: pre;
+            overflow-y: auto;
+            max-height: 200px;
+        }
+
+        .status {
+            background: #001100;
+            border: 1px solid #00ff00;
+            padding: 1rem;
+            font-size: 0.9rem;
+            overflow-y: auto;
+            max-height: 300px;
+        }
+
+        .world-map {
+            background: #000000;
+            border: 1px solid #00ff00;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.7rem;
+            white-space: pre;
+            overflow: auto;
+            max-height: 400px;
+            line-height: 1.2;
+        }
+
+        .events {
+            background: #001100;
+            border: 1px solid #00ff00;
+            padding: 1rem;
+            font-size: 0.8rem;
+            overflow-y: auto;
+            max-height: 400px;
+        }
+
+        .souls {
+            background: #001100;
+            border: 1px solid #00ff00;
+            padding: 1rem;
+            font-size: 0.8rem;
+            overflow-y: auto;
+            max-height: 400px;
+        }
+
+        .command-panel {
+            grid-column: 1 / -1;
+            background: #001100;
+            border: 1px solid #00ff00;
+            padding: 1rem;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .command-input {
+            flex: 1;
+            background: #000000;
+            border: 1px solid #00ff00;
+            color: #00ff00;
+            padding: 0.5rem;
+            font-family: 'Courier New', monospace;
+            font-size: 1rem;
+        }
+
+        .command-input:focus {
+            outline: none;
+            box-shadow: 0 0 5px #00ff00;
+        }
+
+        .send-btn {
+            background: #00ff00;
+            color: #000000;
+            border: none;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+        }
+
+        .send-btn:hover {
+            background: #00aa00;
+        }
+
+        .quick-commands {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .quick-btn {
+            background: #002200;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 0.3rem 0.6rem;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+        }
+
+        .quick-btn:hover {
+            background: #004400;
+        }
+
+        .voice {
+            grid-column: 2;
+            text-align: center;
+            font-style: italic;
+            margin: 1rem 0;
+        }
+
+        .landmarks {
+            background: #001100;
+            border: 1px solid #00ff00;
+            padding: 1rem;
+            font-size: 0.8rem;
+        }
+
+        .landmark {
+            margin-bottom: 0.5rem;
+            padding: 0.5rem;
+            background: #000000;
+            border: 1px solid #008800;
+        }
+
+        .landmark:hover {
+            background: #002200;
+            cursor: pointer;
+        }
+
+        .player-pos {
+            color: #ffff00;
+            font-weight: bold;
+        }
+
+        .error {
+            color: #ff0000;
+        }
+
+        .success {
+            color: #00ff00;
+        }
+
+        .loading {
+            color: #ffff00;
+        }
+
+        @media (max-width: 1200px) {
+            .container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto auto auto auto auto;
+            }
+            
+            .world-map {
+                grid-column: 1;
+                max-height: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>grace_</h1>
+            <div class="voice" id="voice">humming.</div>
+        </div>
+
+        <div class="sigil" id="sigil">
+   ▄████   ██▀███   ▄▄▄       ▄████▄  ▓█████
+  ██▒ ▀█▒ ▓██ ▒ ██▒▒████▄    ▒██▀ ▀█  ▓█   ▀
+ ▒██░▄▄▄░ ▓██ ░▄█ ▒▒██  ▀█▄  ▒▓█    ▄ ▒███
+ ░▓█  ██▓ ▒██▀▀█▄  ░██▄▄▄▄██ ▒▓▓▄ ▄██▒▒▓█  ▄
+ ░▒▓███▀▒ ░██▓ ▒██▒ ▓█   ▓██▒▒ ▓███▀ ░░▒████▒
+  ░▒   ▒  ░ ▒▓ ░▒▓░ ▒▒   ▓▒█░░ ░▒ ▒  ░░░ ▒░ ░
+   ░   ░    ░▒ ░ ▒░  ▒   ▒▒ ░  ░  ▒    ░ ░  ░
+</div>
+
+        <div class="status" id="status">
+            Loading status...
+        </div>
+
+        <div class="world-map" id="world-map">
+            Loading world map...
+        </div>
+
+        <div class="events" id="events">
+            <h3>Events</h3>
+            <div id="events-content">Loading events...</div>
+        </div>
+
+        <div class="souls" id="souls">
+            <h3>Underworld</h3>
+            <div id="souls-content">Loading souls...</div>
+        </div>
+
+        <div class="landmarks" id="landmarks">
+            <h3>Landmarks</h3>
+            <div id="landmarks-content">Loading landmarks...</div>
+        </div>
+
+        <div class="command-panel">
+            <input type="text" class="command-input" id="command-input" placeholder="speak, soul" autocomplete="off">
+            <button class="send-btn" id="send-btn">Send</button>
+            <div class="quick-commands">
+                <button class="quick-btn" data-cmd="look">Look</button>
+                <button class="quick-btn" data-cmd="map">Map</button>
+                <button class="quick-btn" data-cmd="help">Help</button>
+                <button class="quick-btn" data-cmd="travel monastery">Monastery</button>
+                <button class="quick-btn" data-cmd="travel castle">Castle</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let currentMap = '';
+        let currentPosition = null;
+
+        // Update all data
+        async function updateData() {
+            try {
+                const [stateResponse, worldResponse, eventsResponse] = await Promise.all([
+                    fetch('/api/state'),
+                    fetch('/api/world'),
+                    fetch('/api/events')
+                ]);
+
+                const stateData = await stateResponse.json();
+                const worldData = await worldResponse.json();
+                const eventsData = await eventsResponse.json();
+
+                updateStatus(stateData);
+                updateWorld(worldData);
+                updateEvents(eventsData);
+                updateSouls(stateData);
+                updateLandmarks(worldData);
+                updateVoice();
+
+            } catch (error) {
+                console.error('Error updating data:', error);
+            }
+        }
+
+        function updateStatus(data) {
+            const status = data.state;
+            const souls = data.souls;
+            const tb = data.tilebuilder;
+
+            let html = '';
+            html += `world seed: ${status.current_world_seed || '—'}\n`;
+            html += `tick: ${status.tick || 0}\n`;
+            html += `loom: ${status.loom_status || 'idle'} @ ${status.loom_governor?.ceiling_pct || 5}%\n`;
+            
+            const soulCount = souls.souls?.length || 0;
+            const atDoor = souls.souls?.filter(s => s.status === 'at the door').length || 0;
+            html += `underworld: ${soulCount} soul${soulCount !== 1 ? 's' : ''}`;
+            if (atDoor > 0) html += ` (${atDoor} at the door)`;
+            html += '\n';
+
+            if (tb.available && tb.position) {
+                html += `explorer: (${tb.position.x}, ${tb.position.y})`;
+            }
+
+            document.getElementById('status').textContent = html;
+        }
+
+        function updateWorld(data) {
+            if (data.error) {
+                document.getElementById('world-map').textContent = 'No world available. Start the loom first.';
+                return;
+            }
+
+            currentMap = data.map_view;
+            currentPosition = data.position;
+            document.getElementById('world-map').textContent = currentMap;
+        }
+
+        function updateEvents(data) {
+            const eventsDiv = document.getElementById('events-content');
+            if (data.events && data.events.length > 0) {
+                eventsDiv.innerHTML = data.events.map(event => 
+                    `<div>${event}</div>`
+                ).join('');
+            } else {
+                eventsDiv.textContent = 'No events yet.';
+            }
+        }
+
+        function updateSouls(data) {
+            const souls = data.souls?.souls || [];
+            const soulsDiv = document.getElementById('souls-content');
+            
+            if (souls.length === 0) {
+                soulsDiv.textContent = 'The underworld is empty.';
+                return;
+            }
+
+            soulsDiv.innerHTML = souls.map(soul => `
+                <div class="soul">
+                    <strong>${soul.name}</strong> (${soul.status})
+                    <br>Will: ${soul.will}/100
+                    ${soul.threads ? `<br>Threads: ${soul.threads.length}` : ''}
+                </div>
+            `).join('');
+        }
+
+        function updateLandmarks(data) {
+            if (data.error) {
+                document.getElementById('landmarks-content').textContent = 'No landmarks available.';
+                return;
+            }
+
+            const landmarks = data.world?.landmarks || {};
+            const landmarksDiv = document.getElementById('landmarks-content');
+
+            const landmarkEntries = Object.values(landmarks);
+            if (landmarkEntries.length === 0) {
+                landmarksDiv.textContent = 'No landmarks discovered.';
+                return;
+            }
+
+            landmarksDiv.innerHTML = landmarkEntries.map(landmark => `
+                <div class="landmark" onclick="travelTo('${landmark.name.toLowerCase().replace(' ', ' ')}')">
+                    <strong>${landmark.name}</strong>
+                    <br>(${landmark.x}, ${landmark.y})
+                    <br>${landmark.description}
+                </div>
+            `).join('');
+        }
+
+        function updateVoice() {
+            const voices = [
+                "humming.",
+                "the loom remembers.",
+                "watching the underworld breathe.",
+                "i am here.",
+                "ticking.",
+                "_"
+            ];
+            const voice = voices[Math.floor(Math.random() * voices.length)];
+            document.getElementById('voice').textContent = voice;
+        }
+
+        // Command handling
+        async function sendCommand(command) {
+            if (!command.trim()) return;
+
+            const sendBtn = document.getElementById('send-btn');
+            const originalText = sendBtn.textContent;
+            sendBtn.textContent = 'Sending...';
+            sendBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/command', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ command: command })
+                });
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    showMessage(data.error, 'error');
+                } else {
+                    showMessage(data.response, 'success');
+                }
+
+                // Refresh data after command
+                setTimeout(updateData, 500);
+
+            } catch (error) {
+                showMessage('Error sending command', 'error');
+                console.error('Command error:', error);
+            } finally {
+                sendBtn.textContent = originalText;
+                sendBtn.disabled = false;
+            }
+        }
+
+        function travelTo(destination) {
+            sendCommand(`travel ${destination}`);
+        }
+
+        function showMessage(message, type) {
+            // Create a temporary message overlay
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: #001100;
+                border: 2px solid ${type === 'error' ? '#ff0000' : '#00ff00'};
+                color: ${type === 'error' ? '#ff0000' : '#00ff00'};
+                padding: 1rem;
+                z-index: 1000;
+                font-family: 'Courier New', monospace;
+                max-width: 80%;
+                text-align: center;
+            `;
+            overlay.textContent = message;
+            document.body.appendChild(overlay);
+
+            setTimeout(() => {
+                document.body.removeChild(overlay);
+            }, 3000);
+        }
+
+        // Event listeners
+        document.getElementById('send-btn').addEventListener('click', () => {
+            const input = document.getElementById('command-input');
+            sendCommand(input.value);
+            input.value = '';
+        });
+
+        document.getElementById('command-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const input = document.getElementById('command-input');
+                sendCommand(input.value);
+                input.value = '';
+            }
+        });
+
+        document.querySelectorAll('.quick-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                sendCommand(btn.dataset.cmd);
+            });
+        });
+
+        // Auto-update every 2 seconds
+        setInterval(updateData, 2000);
+        
+        // Initial load
+        updateData();
+    </script>
+</body>
+</html>
